@@ -36,7 +36,6 @@ export default async function handler(
   )
   const changesetXml = await gunzip(changesetBuffer)
   const featureCollection = xmlToFeatureCollection(changesetXml, sequenceNumber)
-  console.log(changesetXml.toString('utf-8'))
   res.setHeader(
     'Cache-Control',
     'public, s-maxage=29, stale-while-revalidate=29'
