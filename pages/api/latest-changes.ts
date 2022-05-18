@@ -8,6 +8,8 @@ const gunzip = util.promisify(zlib.gunzip)
 export interface PointProperties {
   nodeId: string
   timestamp: number
+  edits: number
+  user: string
 }
 
 export type ChangesFC = GeoJSON.FeatureCollection<
@@ -34,10 +36,10 @@ export default async function handler(
   )
   const changesetXml = await gunzip(changesetBuffer)
   const featureCollection = xmlToFeatureCollection(changesetXml, sequenceNumber)
-
+  console.log(changesetXml.toString('utf-8'))
   res.setHeader(
     'Cache-Control',
-    'public, s-maxage=29, stale-while-revalidate=59'
+    'public, s-maxage=29, stale-while-revalidate=29'
   )
   res.status(200).json(featureCollection)
 }
@@ -48,33 +50,33 @@ const xmlToFeatureCollection = (
 ): ChangesFC => {
   let marker = 0
   let startNode,
-    startRelation,
     startId,
     endId,
+    startUser,
+    endUser,
     startTimestamp,
     startLat,
     endLat,
     startLon,
     endLon
 
-  const features = []
-
-  const occupiedTiles = new Set()
-  const dedupeTileZoom = 17
+  const tileFeaturesMap = new Map()
+  const dedupeTileZoom = 15
 
   // a while true of at most 10000 features per changeset
   for (let i = 0; i < 10000; i++) {
     startNode = xml.indexOf('<node', marker, 'utf-8')
-    startRelation = xml.indexOf('<relation', marker, 'utf-8')
 
-    if (startNode === -1 && startRelation === -1) {
+    if (startNode === -1) {
       break
     }
 
-    startId = xml.indexOf('id="', Math.min(startNode, startRelation), 'utf-8')
+    startId = xml.indexOf('id="', startNode, 'utf-8')
     endId = xml.indexOf('"', startId + 5, 'utf-8')
+    startUser = xml.indexOf('user="', startNode, 'utf-8')
+    endUser = xml.indexOf('"', startUser + 7, 'utf-8')
     startTimestamp = xml.indexOf('timestamp="', endId, 'utf-8')
-    startLat = xml.indexOf('lat="', startTimestamp + 30, 'utf-8')
+    startLat = xml.indexOf('lat="', startTimestamp + 32, 'utf-8')
     endLat = xml.indexOf('"', startLat + 6, 'utf-8')
     startLon = xml.indexOf('lon="', endLat, 'utf-8')
     endLon = xml.indexOf('"', startLon + 6, 'utf-8')
@@ -82,6 +84,7 @@ const xmlToFeatureCollection = (
     marker = endLon + 1
 
     let nodeId = xml.slice(startId + 4, endId).toString('utf-8')
+    let user = xml.slice(startUser + 6, endUser).toString('utf-8')
     let timestamp = new Date(
       xml.slice(startTimestamp + 11, startTimestamp + 31).toString('utf-8')
     ).getTime()
@@ -90,19 +93,24 @@ const xmlToFeatureCollection = (
 
     const tile = tilebelt.pointToTile(lon, lat, dedupeTileZoom).join('/')
 
-    if (!occupiedTiles.has(tile)) {
+    if (!tileFeaturesMap.has(tile)) {
       // @todo add the user to the feature properties
       let feature: GeoJSON.Feature<GeoJSON.Point, PointProperties> = {
         type: 'Feature',
-        properties: { nodeId, timestamp },
+        properties: { nodeId, timestamp, edits: 1, user },
         geometry: { type: 'Point', coordinates: [lon, lat] },
         id: sequenceNumber * 10000 + i,
       }
 
-      features.push(feature)
-      occupiedTiles.add(tile)
+      tileFeaturesMap.set(tile, feature)
+    } else {
+      let feature = tileFeaturesMap.get(tile)
+      feature.properties.edits++
     }
   }
 
-  return { type: 'FeatureCollection', features }
+  return {
+    type: 'FeatureCollection',
+    features: Array.from(tileFeaturesMap.values()),
+  }
 }

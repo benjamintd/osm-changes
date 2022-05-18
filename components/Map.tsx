@@ -15,7 +15,7 @@ const Map = ({
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
     const map = new mapboxgl.Map({
       container: 'map',
-      style: 'mapbox://styles/mapbox/satellite-v9',
+      style: 'mapbox://styles/benjamintd/cl3bswrm4003m15qqzdag7ydf',
       projection: 'globe',
       maxZoom: 5,
       zoom: 1,
@@ -44,7 +44,7 @@ const Map = ({
           'heatmap-weight': ['number', ['feature-state', 'intensity'], 0],
           // Increase the heatmap color weight weight by zoom level
           // heatmap-intensity is a multiplier on top of heatmap-weight
-          'heatmap-intensity': 0.05,
+          'heatmap-intensity': 0.2,
           // Color ramp for heatmap.  Domain is 0 (low) to 1 (high).
           // Begin color ramp at 0-stop with a 0-transparancy color
           // to create a blur-like effect.
@@ -72,11 +72,40 @@ const Map = ({
       })
 
       map.addLayer({
+        id: 'changes-wave',
+        type: 'circle',
+        source: 'changes',
+        paint: {
+          'circle-color': '#fff',
+          'circle-opacity': [
+            '-',
+            ['number', ['feature-state', 'intensity'], 0],
+            0.9,
+          ],
+          'circle-radius': [
+            '+',
+            10,
+            ['*', 100, ['-', 1, ['number', ['feature-state', 'intensity'], 0]]],
+          ],
+        },
+      })
+
+      map.addLayer({
         id: 'changes',
         type: 'circle',
         source: 'changes',
         paint: {
-          'circle-color': '#fef2f2',
+          'circle-color': [
+            'interpolate',
+            ['linear'],
+            ['number', ['feature-state', 'intensity'], 0],
+            0,
+            '#991b1b',
+            0.95,
+            '#ef4444',
+            1,
+            '#f87171',
+          ],
           'circle-opacity': [
             '*',
             ['number', ['feature-state', 'intensity'], 0],
@@ -123,12 +152,13 @@ const Map = ({
             number,
             number
           ]
-          const description = `${features.length} change${
-            features.length > 1 ? 's' : ''
+          const edits = features.reduce((a, b) => a + b.properties!.edits, 0)
+          const description = `${edits} edit${
+            edits > 1 ? 's' : ''
           }, ${timeFormatter.format(
-            Math.round((feature.properties.timestamp - Date.now()) / 1000),
-            'seconds'
-          )}`
+            Math.round((feature.properties.timestamp - Date.now()) / 60000),
+            'minutes'
+          )} by ${feature.properties.user}`
 
           // Populate the popup and set its coordinates
           // based on the feature found.

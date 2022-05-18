@@ -5,6 +5,8 @@ export interface DataMessage {
     {
       nodeId: string
       timestamp: number
+      edits: number
+      user: string
     }
   >
 }
