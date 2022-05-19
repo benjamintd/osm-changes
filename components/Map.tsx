@@ -171,6 +171,16 @@ const Map = ({
         popup.remove()
       })
 
+      const interval = setInterval(() => {
+        const center = map.getCenter()
+        map.panTo([center.lng + 2, center.lat], {
+          duration: 2000,
+          easing: (t) => t,
+        })
+      }, 1000)
+
+      map.once('dragstart', () => clearInterval(interval))
+
       mapRef.current = map
       setIsLoaded(true)
     })
